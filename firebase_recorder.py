@@ -98,14 +98,14 @@ class Recorder():
         self.is_recording = False
 
  
-"""        
+      
 if __name__ == "__main__":
-    main(file_name)
+    recorder = firebase_recorder.Recorder()
+
     while True:
         try:
             print("recording")
         except KeyboardInterrupt:
             print("CTRL-C pressed. Exiting.")
-            recording = False
+            recorder.stop()
             break
-"""
