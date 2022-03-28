@@ -50,6 +50,7 @@ def on_snapshot(col_snapshot, changes, read_time):
     docs = query.get()
     tdatetime = datetime.datetime.now()
     tstr = tdatetime.strftime('%Y%m%d_%H%M%S')
+    #docsの中身は最新の一つのみ
     for doc in docs:
         print(f'{doc.id} => {doc.to_dict()}')
         if doc.to_dict()["record"] == True and is_recording == False:
