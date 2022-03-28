@@ -6,7 +6,7 @@ from firebase_admin import firestore
 from glob import glob
 import datetime
 
-import firebase_recorder
+import multi_recorder
 import threading
 import time
 
@@ -27,8 +27,9 @@ doc_ref.add({
     u'datetime':datetime.datetime.now(),
     u'record': False,
     u'machine_id':data[0][1],
-    u'connected_device_cnt':firebase_recorder.cnt_device(),
-    u'expect_connected_device_cnt':int(data[1][1])
+    u'connected_device_cnt':multi_recorder.cnt_device(),
+    u'expect_connected_device_cnt':int(data[1][1]),
+    u'comment':'device is started',
 })
 
 # Create an Event for notifying main thread.
@@ -40,10 +41,10 @@ callback_done = threading.Event()
 col_query = db.collection(u'some_user')
 is_recording = False
 
-recorder = firebase_recorder.Recorder()
-
+recorder = multi_recorder.Recorder()
+rec_start_time = 0
 def on_snapshot(col_snapshot, changes, read_time):
-    global is_recording
+    global is_recording,rec_start_time
     print(u'Callback received query snapshot.')
     print(u'Current cities in California:')
     query = col_query.order_by("datetime", direction=firestore.Query.DESCENDING).limit(1)
@@ -54,7 +55,9 @@ def on_snapshot(col_snapshot, changes, read_time):
     for doc in docs:
         print(f'{doc.id} => {doc.to_dict()}')
         if doc.to_dict()["record"] == True and is_recording == False:
-            recorder.start(tstr)
+            rec_start_time = time.time()
+            recorder.start(file_name=tstr)
+            
         elif doc.to_dict()["record"] == False:
             recorder.stop()
         is_recording = doc.to_dict()["record"]
@@ -62,9 +65,40 @@ def on_snapshot(col_snapshot, changes, read_time):
     callback_done.set()
 
 
+def count_one_hour():
+    global is_recording,rec_start_time
+    if is_recording:
+        if time.time() -rec_start_time >60*60:
+            doc_ref.add({
+                u'datetime':datetime.datetime.now(),
+                u'record': False,
+                u'machine_id':data[0][1],
+                u'connected_device_cnt':multi_recorder.cnt_device(),
+                u'expect_connected_device_cnt':int(data[1][1]),
+                u'comment':"record stop because one hour hass passed"
+            })
+            is_recording = False
 if __name__ == "__main__":
     
     # Watch the collection query
     query_watch = col_query.on_snapshot(on_snapshot)
-    while True: 
-        time.sleep(1)
+    
+    import sys, signal
+    import msvcrt
+    #ctrl-cで呼び出される関数
+    def signal_handler(signal, frame):
+        recorder.stop()
+        print("\nprogram exiting gracefully\n")
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    recorder.start()
+    print("press escape to stop")
+    while True:
+        if msvcrt.kbhit() and msvcrt.getch() == chr(27).encode():
+            print("escaped")
+            recorder.stop()
+            break
+        time.sleep(0.5)
+        
+        count_one_hour()

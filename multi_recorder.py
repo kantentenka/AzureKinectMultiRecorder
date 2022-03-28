@@ -92,7 +92,7 @@ class Recorder():
         print(f"device {device_num} file {file_num} record start")
         #while self.is_recording:
         #for i in range(150):
-        for i in range(15*10):
+        for i in range(15*20):
             capture = k4a.get_capture()
             record.write_capture(capture)
             if not(self.is_recording):
