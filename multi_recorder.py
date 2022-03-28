@@ -9,10 +9,13 @@ import threading
 import time
 import datetime
 
-import zipfile
+#import zipfile
 
 import subprocess
 from subprocess import Popen
+
+import os
+
 
 def cnt_device():
     cnt = connected_device_count()
@@ -23,7 +26,7 @@ def cnt_device():
 is_recording = False
 
 class Recorder():
-    def __init__(self,remove=True):
+    def __init__(self,is_remove=True):
         tdatetime = datetime.datetime.now()
         tstr = tdatetime.strftime('%Y%m%d_%H%M%S')
         self.prepared_name = tstr
@@ -38,7 +41,8 @@ class Recorder():
             camera_fps=pyk4a.FPS.FPS_15,
         )
 
-        self.remove = remove
+        self.zipping_files = []
+        self.is_remove = is_remove
     def init_device(self):
         self.is_recording = True
         for i in range(self.cnt):
@@ -81,7 +85,6 @@ class Recorder():
     
             thread = threading.Thread(target=lambda : self.recorder(file_name,self.k4a[i],rec,i,0))#,daemon=True)
             thread.start()
-            print(f"test{i}") 
 
 
     def recorder(self,file_name,k4a,record,device_num,file_num):
@@ -89,7 +92,7 @@ class Recorder():
         print(f"device {device_num} file {file_num} record start")
         #while self.is_recording:
         #for i in range(150):
-        for i in range(15*3):
+        for i in range(15*10):
             capture = k4a.get_capture()
             record.write_capture(capture)
             if not(self.is_recording):
@@ -108,41 +111,67 @@ class Recorder():
         
 
         #print(f"device {device_num} file {file_num} closed")
-        fullname = f"./{file_name}_{device_num}_{file_num}.mkv"
+        full_name = f"./{file_name}_{device_num}_{file_num}.mkv"
         print(f"{record.captures_count} frames written on {file_name}_{device_num}_{file_num}")
         record.flush()
         record.close()
         del record
-        #subprocess.run(["powershell","compress-archive",f"./record/{fullname}",f"D:/NICT/{fullname}.zip" ])
-        Popen(["powershell","compress-archive",f"./record/{fullname}",f"D:/NICT/{fullname}.zip" ],shell = True)
-        #self.zip(f"{file_name}_{device_num}_{file_num}")
 
         
-    def stop(self):
-        self.is_recording = False
+        #self.zipper(f"{file_name}_{device_num}_{file_num}")
 
-    def zip(self,file_name):
+        self.zip_on_commandline(full_name)
+    def stop(self):
+        print("stop recording")
+        self.is_recording = False
+    def zip_on_commandline(self,full_name):
+        self.zipping_files.append(full_name)
+        start = time.time()
+        #subprocess.run(["powershell","compress-archive",f"./record/{fullname}",f"D:/NICT/{fullname}.zip" ])
+        process=Popen(["powershell","compress-archive",f"./record/{full_name}",f"D:/NICT/{full_name}.zip" ],shell = True)
+        process.wait()
+        print(f"{full_name} was zipped in {time.time() - start} s")
+        self.zipping_files.remove(full_name)
+        if self.is_remove:
+            
+            os.remove(f"./record/{full_name}")
+            print(f"./record/{full_name} was removed")
+    def zipper(self,full_name):
         self.start = time.time()
-        print(f"{file_name} is zipping")
-        with zipfile.ZipFile(f'D:/NICT/{file_name}.zip', 'w',
+        print(f"{full_name} is zipping")
+        with zipfile.ZipFile(f'D:/NICT/{full_name}.zip', 'w',
                      compression=zipfile.ZIP_DEFLATED,
                      compresslevel=9) as zf:
-            zf.write(f'./record/{file_name}.mkv',f'{file_name}.mkv')
-        print(f"{file_name} was zipped in {time.time() -self.start} s")
-        if self.remove:
-            pass
+            zf.write(f'./record/{full_name}',f'{full_name}')
+        print(f"{full_name} was zipped in {time.time() -self.start} s")
+        if self.is_remove:
+            os.remove(f"./record/{full_name}")
+    def len_zip_proccess(self):
+        
+        for i in self.zipping_files:
+            print(f'{i} is zipping')
+        print()
+        return len(self.zipping_files)
 
 
 
 if __name__ == "__main__":
-    recorder = Recorder(remove = False)
+    recorder = Recorder(is_remove = True)
     import sys, signal
+    import msvcrt
     def signal_handler(signal, frame):
         recorder.stop()
-        print("\nprogram exiting gracefully")
+        print("\nprogram exiting gracefully\n")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
     recorder.start()
+    print("press escape to stop")
     while True:
-        pass
+        if msvcrt.kbhit() and msvcrt.getch() == chr(27).encode():
+            print("escaped")
+            recorder.stop()
+            break
+    
+    #while recorder.len_zip_proccess():
+    #    print(recorder.len_zip_proccess())
