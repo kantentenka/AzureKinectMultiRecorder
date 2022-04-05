@@ -43,6 +43,11 @@ class Recorder():
 
         self.zipping_files = []
         self.is_remove = is_remove
+
+        self.captures = {}
+        if not(self.is_k4a()):
+            print("device init")
+            self.init_device()
     def init_device(self):
         self.is_recording = True
         for i in range(self.cnt):
@@ -92,9 +97,10 @@ class Recorder():
         print(f"device {device_num} file {file_num} record start")
         #while self.is_recording:
         #for i in range(150):
-        for i in range(15*10):
+        for i in range(15*20):
             capture = k4a.get_capture()
             record.write_capture(capture)
+            self.captures[device_num] = capture.color
             if not(self.is_recording):
                 break
         #print(f"device {device_num} file {file_num} finish")
@@ -120,15 +126,21 @@ class Recorder():
         
         #self.zipper(f"{file_name}_{device_num}_{file_num}")
 
-        self.zip_on_commandline(full_name)
+        #self.zip_on_commandline(full_name)
     def stop(self):
         print("stop recording")
         self.is_recording = False
+    def get_captures(self):
+        print(type(self.captures[0]))
+        return self.captures
+        
     def zip_on_commandline(self,full_name):
         self.zipping_files.append(full_name)
         start = time.time()
         #subprocess.run(["powershell","compress-archive",f"./record/{fullname}",f"D:/NICT/{fullname}.zip" ])
-        process=Popen(["powershell","compress-archive",f"./record/{full_name}",f"D:/NICT/{full_name}.zip" ],shell = True)
+        #process=Popen(["powershell","compress-archive",f"./record/{full_name}",f"D:/NICT/{full_name}.zip" ],shell = True)
+        process=Popen(["7z","a",f"D:/NICT/{full_name}.zip",f"./record/{full_name}" ],shell = True)
+        
         process.wait()
         print(f"{full_name} was zipped in {time.time() - start} s")
         self.zipping_files.remove(full_name)
@@ -153,10 +165,10 @@ class Recorder():
         print()
         return len(self.zipping_files)
 
-
+    
 
 if __name__ == "__main__":
-    recorder = Recorder(is_remove = True)
+    recorder = Recorder(is_remove = False)
     import sys, signal
     import msvcrt
     def signal_handler(signal, frame):
