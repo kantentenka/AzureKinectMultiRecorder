@@ -13,6 +13,10 @@ import time
 import cv2
 import io
 
+#WARING:スリープするとwi-fi接続が途切れてエラーになります
+#スリープしない設定にしてください
+
+
 cred = credentials.Certificate(f'{glob("./json/*json")[0]}')
 firebase_admin.initialize_app(cred,{"storageBucket":"azurekinetrecorder.appspot.com"})
 
@@ -31,13 +35,13 @@ print(data)
 
 doc_ref = db.collection(u'some_user')
 doc_ref.add({
-    u'datetime':datetime.datetime.now(),
+    u'datetime':datetime.datetime.now()-datetime.timedelta(hours=9),
     u'record': False,
     u'machine_id':data[0][1],
     u'connected_device_cnt':multi_recorder.cnt_device(),
     u'expect_connected_device_cnt':int(data[1][1]),
     u'comment':'device is started',
-    u'screenshot':True,
+    u'screenshot':False,
     u'screenshotname':""
 })
 
@@ -49,12 +53,13 @@ callback_done = threading.Event()
 
 col_query = db.collection(u'some_user')
 is_recording = False
+is_first_read = True
 
 recorder = multi_recorder.Recorder()
 rec_start_time = 0
 
 def on_snapshot(col_snapshot, changes, read_time):
-    global is_recording,rec_start_time
+    global is_recording,rec_start_time,is_first_read
     print(u'Callback received query snapshot.')
     print(u'Current cities in California:')
     query = col_query.order_by("datetime", direction=firestore.Query.DESCENDING).limit(1)
@@ -63,6 +68,9 @@ def on_snapshot(col_snapshot, changes, read_time):
     tstr = tdatetime.strftime('%Y%m%d_%H%M%S')
     for doc in docs:
         print(f'{doc.id} => {doc.to_dict()}')
+        if is_first_read:
+            is_first_read = False
+            break
         if doc.to_dict()["record"] == True and is_recording == False:
             rec_start_time = time.time()
             recorder.start(file_name=tstr)
@@ -71,23 +79,23 @@ def on_snapshot(col_snapshot, changes, read_time):
             recorder.stop()
         if doc.to_dict()["screenshot"]:
             cap = recorder.get_captures()
-
-            content_type = "image/png"
-            tdatetime = datetime.datetime.now()
-            tstr = tdatetime.strftime('%Y%m%d_%H%M%S')
-            for dict_key,dict_item in cap.items():
-                firename = f"{tstr}_{data[0][1]}_{dict_key}.png"
-                blob = bucket.blob(firename)
-                is_success,buffer = cv2.imencode(".png",dict_item)
-                io_buf= io.BytesIO(buffer)
-                
-                blob.upload_from_file(io_buf,content_type=content_type)
-                doc_ref = db.collection(u'some_user_capture')
-                doc_ref.add({
-                    u'datetime':datetime.datetime.now(),
-                    u'firename':firename,
-                    u'devicestate':f"{data[0][1]}_{dict_key}"
-                })
+            if cap:
+                content_type = "image/png"
+                tdatetime = datetime.datetime.now()
+                tstr = tdatetime.strftime('%Y%m%d_%H%M%S')
+                for dict_key,dict_item in cap.items():
+                    firename = f"{tstr}_{data[0][1]}_{dict_key}.png"
+                    blob = bucket.blob(firename)
+                    is_success,buffer = cv2.imencode(".png",dict_item)
+                    io_buf= io.BytesIO(buffer)
+                    
+                    blob.upload_from_file(io_buf,content_type=content_type)
+                    doc_ref = db.collection(u'some_user_capture')
+                    doc_ref.add({
+                        u'datetime':datetime.datetime.now()-datetime.timedelta(hours=9),
+                        u'filename':firename,
+                        u'devicestate':f"{data[0][1]}_{dict_key}"
+                    })
         is_recording = doc.to_dict()["record"]
 
     callback_done.set()
@@ -98,7 +106,7 @@ def count_one_hour():
     if is_recording:
         if time.time() -rec_start_time >60*60:
             doc_ref.add({
-                u'datetime':datetime.datetime.now(),
+                u'datetime':datetime.datetime.now()-datetime.timedelta(hours=9),
                 u'record': False,
                 u'machine_id':data[0][1],
                 u'connected_device_cnt':multi_recorder.cnt_device(),
@@ -122,7 +130,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
-    recorder.start()
+    #recorder.start()
     print("press escape to stop")
     while True:
         if msvcrt.kbhit() and msvcrt.getch() == chr(27).encode():

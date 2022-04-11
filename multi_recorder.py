@@ -15,7 +15,7 @@ import subprocess
 from subprocess import Popen
 
 import os
-
+from glob import glob
 
 def cnt_device():
     cnt = connected_device_count()
@@ -27,6 +27,7 @@ is_recording = False
 
 class Recorder():
     def __init__(self,is_remove=True):
+        
         tdatetime = datetime.datetime.now()
         tstr = tdatetime.strftime('%Y%m%d_%H%M%S')
         self.prepared_name = tstr
@@ -43,13 +44,13 @@ class Recorder():
 
         self.zipping_files = []
         self.is_remove = is_remove
-
+        
+        
         self.captures = {}
         if not(self.is_k4a()):
             print("device init")
             self.init_device()
     def init_device(self):
-        self.is_recording = True
         for i in range(self.cnt):
             print(i)
             
@@ -80,14 +81,17 @@ class Recorder():
         #self.record = []
         print(len(self.k4a)>0)
         for i in range(self.cnt):
+
+            path = f"./record/{file_name}_{i}_0.mkv"
+                
             rec = PyK4ARecord(
                 device=self.k4a[i],
                 config=self.config,
-                path=f"./record/{file_name}_{i}_0.mkv")
+                path=path)
                           
             rec.create()  
 
-    
+            print(i)
             thread = threading.Thread(target=lambda : self.recorder(file_name,self.k4a[i],rec,i,0))#,daemon=True)
             thread.start()
 
@@ -100,16 +104,17 @@ class Recorder():
         for i in range(15*20):
             capture = k4a.get_capture()
             record.write_capture(capture)
-            self.captures[device_num] = capture.color
+            
             if not(self.is_recording):
                 break
         #print(f"device {device_num} file {file_num} finish")
 
         if self.is_recording:
+            path = f"./record/{file_name}_{device_num}_{file_num+1}.mkv"
             next_rec = PyK4ARecord(
                     device=k4a,
                     config=self.config,
-                    path=f"./record/{file_name}_{device_num}_{file_num+1}.mkv")
+                    path=path)
             next_rec.create()
             
             thread = threading.Thread(target=lambda : self.recorder(file_name,k4a,next_rec,device_num,file_num+1))#,daemon=True)
@@ -131,9 +136,19 @@ class Recorder():
         print("stop recording")
         self.is_recording = False
     def get_captures(self):
-        print(type(self.captures[0]))
-        return self.captures
-        
+        for device_num,k4a_i in enumerate(self.k4a):
+            capture = k4a_i.get_capture()
+            print(capture.color.shape)
+            size = capture.color.shape
+            self.captures[device_num] = cv2.resize(capture.color,dsize=[size[1]//2,size[0]//2])
+            
+        if len(self.captures)!=0:
+            return self.captures
+        else:
+            return None
+
+    #使ていなzip圧縮関数　
+    #圧縮する場合は別プロセスでzipper.pyを立ち上げること
     def zip_on_commandline(self,full_name):
         self.zipping_files.append(full_name)
         start = time.time()
@@ -148,6 +163,9 @@ class Recorder():
             
             os.remove(f"./record/{full_name}")
             print(f"./record/{full_name} was removed")
+            
+    #使ていないzip圧縮関数　圧縮する場合は別プロセスでzipper.pyを立ち上げること
+
     def zipper(self,full_name):
         self.start = time.time()
         print(f"{full_name} is zipping")
