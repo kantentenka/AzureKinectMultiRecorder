@@ -25,6 +25,17 @@ def cnt_device():
 
 is_recording = False
 
+MAX_SAMPLES = 1000
+
+
+def set_default_data(data):
+    data["acc_x"] = MAX_SAMPLES * [data["acc_x"][-1]]
+    data["acc_y"] = MAX_SAMPLES * [data["acc_y"][-1]]
+    data["acc_z"] = MAX_SAMPLES * [data["acc_z"][-1]]
+    data["gyro_x"] = MAX_SAMPLES * [data["acc_x"][-1]]
+    data["gyro_y"] = MAX_SAMPLES * [data["acc_y"][-1]]
+    data["gyro_z"] = MAX_SAMPLES * [data["acc_z"][-1]]
+
 class Recorder():
     def __init__(self,is_remove=True):
         
@@ -146,7 +157,15 @@ class Recorder():
             return self.captures
         else:
             return None
-
+    def get_imu(self):
+        imu ={}
+        for num,k4a_i in enumerate(self.k4a):
+            sample = k4a_i.get_imu_sample()
+            imu[num] = {}
+            imu[num]["device_num"] = num
+            imu[num]["acc_x"], imu[num]["acc_y"], imu[num]["acc_z"] = sample.pop("acc_sample")
+            imu[num]["gyro_x"], imu[num]["gyro_y"], imu[num]["gyro_z"] = sample.pop("gyro_sample")
+        return imu
     #使ていなzip圧縮関数　
     #圧縮する場合は別プロセスでzipper.pyを立ち上げること
     def zip_on_commandline(self,full_name):

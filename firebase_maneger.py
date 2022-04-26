@@ -45,6 +45,8 @@ doc_ref.add({
     u'screenshotname':""
 })
 
+doc_imu_ref = db.collection(u'some_user_imu')
+
 # Create an Event for notifying main thread.
 callback_done = threading.Event()
 
@@ -57,6 +59,13 @@ is_first_read = True
 
 recorder = multi_recorder.Recorder()
 rec_start_time = 0
+
+def add_imu(imu):
+    for imu_i in imu.values():
+        print(imu_i)
+        imu_i["machine_id"] = data[0][1]
+            
+        doc_imu_ref.add(imu_i)
 
 def on_snapshot(col_snapshot, changes, read_time):
     global is_recording,rec_start_time,is_first_read
@@ -73,9 +82,11 @@ def on_snapshot(col_snapshot, changes, read_time):
             break
         if doc.to_dict()["record"] == True and is_recording == False:
             rec_start_time = time.time()
+            add_imu(recorder.get_imu())
             recorder.start(file_name=tstr)
             
         elif doc.to_dict()["record"] == False:
+            add_imu(recorder.get_imu())
             recorder.stop()
         if doc.to_dict()["screenshot"]:
             cap = recorder.get_captures()
@@ -116,6 +127,7 @@ def count_one_hour():
                 u'screenshotname':""
             })
             is_recording = False
+        
 if __name__ == "__main__":
     
     # Watch the collection query
