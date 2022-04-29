@@ -116,6 +116,8 @@ def count_one_hour():
     global is_recording,rec_start_time
     if is_recording:
         if time.time() -rec_start_time >60*60:
+            recorder.stop()
+
             doc_ref.add({
                 u'datetime':datetime.datetime.now()-datetime.timedelta(hours=9),
                 u'record': False,
