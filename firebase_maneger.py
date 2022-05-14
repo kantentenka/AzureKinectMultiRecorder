@@ -116,6 +116,7 @@ def count_one_hour():
     global is_recording,rec_start_time
     if is_recording:
         if time.time() -rec_start_time >60*60:
+            recorder.stop()
             doc_ref.add({
                 u'datetime':datetime.datetime.now()-datetime.timedelta(hours=9),
                 u'record': False,
@@ -145,6 +146,7 @@ if __name__ == "__main__":
     #recorder.start()
     print("press escape to stop")
     while True:
+        
         if msvcrt.kbhit() and msvcrt.getch() == chr(27).encode():
             print("escaped")
             recorder.stop()

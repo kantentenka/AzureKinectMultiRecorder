@@ -63,19 +63,24 @@ class Recorder():
             self.init_device()
     def init_device(self):
         for i in range(self.cnt):
-            print(i)
-            
-            self.k4a.append(PyK4A(
-                config = self.config,
-                device_id=i
-            ))
-            self.k4a[i].start()
+            try:
+                print(i)
+                
+                self.k4a.append(PyK4A(
+                    config = self.config,
+                    device_id=i
+                ))
+                self.k4a[-1].start()
 
-            # getters and setters directly get and set on device
-            self.k4a[i].whitebalance = 4500
-            assert self.k4a[i].whitebalance == 4500
-            self.k4a[i].whitebalance = 4510
-            assert self.k4a[i].whitebalance == 4510
+                # getters and setters directly get and set on device
+                self.k4a[-1].whitebalance = 4500
+                assert self.k4a[-1].whitebalance == 4500
+                self.k4a[-1].whitebalance = 4510
+                assert self.k4a[-1].whitebalance == 4510
+            except Exception as e:
+                print(e)
+                self.k4a.pop()
+        print(f"{len(self.k4a)} devices were init!")
     def is_k4a(self):
         return len(self.k4a)>0
     def start(self,file_name=""):
@@ -91,7 +96,7 @@ class Recorder():
             self.init_device()
         #self.record = []
         print(len(self.k4a)>0)
-        for i in range(self.cnt):
+        for i in range(len(self.k4a)):
 
             path = f"./record/{file_name}_{i}_0.mkv"
                 
