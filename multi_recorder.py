@@ -1,3 +1,4 @@
+from mimetypes import init
 import cv2
 import numpy as np
 
@@ -17,10 +18,10 @@ from subprocess import Popen
 import os
 from glob import glob
 
-def cnt_device():
+def get_device_num():
     cnt = connected_device_count()
     
-    print(f"{cnt} device(s) connected")
+    #print(f"{cnt} device(s) connected")
     return cnt
 
 is_recording = False
@@ -43,8 +44,8 @@ class Recorder():
         tstr = tdatetime.strftime('%Y%m%d_%H%M%S')
         self.prepared_name = tstr
         self.is_recording = False
-        self.cnt = cnt_device()
-        self.k4a = []
+        self.cnt = get_device_num()
+        self.k4a = {}
         self.record = []
         self.config=Config(            
             color_resolution=pyk4a.ColorResolution.RES_720P,
@@ -52,77 +53,140 @@ class Recorder():
             synchronized_images_only=True,
             camera_fps=pyk4a.FPS.FPS_15,
         )
-
-        self.zipping_files = []
-        self.is_remove = is_remove
-        
+        self.enabletoUseDevices = {}
         
         self.captures = {}
+
         if not(self.is_k4a()):
             print("device init")
             self.init_device()
-    def init_device(self):
-        for i in range(self.cnt):
-            try:
-                print(i)
-                
-                self.k4a.append(PyK4A(
-                    config = self.config,
-                    device_id=i
-                ))
-                self.k4a[-1].start()
 
-                # getters and setters directly get and set on device
-                self.k4a[-1].whitebalance = 4500
-                assert self.k4a[-1].whitebalance == 4500
-                self.k4a[-1].whitebalance = 4510
-                assert self.k4a[-1].whitebalance == 4510
-            except Exception as e:
-                print(e)
-                self.k4a.pop()
-        print(f"{len(self.k4a)} devices were init!")
+        thread = threading.Thread(target=self.DeviceMonitor,daemon=True)
+        thread.start()
+
+
+    def init_device(self):
+        for i in range( get_device_num()):
+            print(i)            
+            self.k4a[i] = PyK4A(
+                config = self.config,
+                device_id=i
+            )
+
     def is_k4a(self):
         return len(self.k4a)>0
+    def enabletoStart(self):
+        if get_device_num() == 0:
+            print("nodevice is abailable")
+            for i in self.enabletoUseDevices:
+                self.enabletoUseDevices[i] = False
+            return
+        for i in range( get_device_num()):
+            
+            trystart = False
+            trycapture = False
+            try:
+                self.k4a[i].open()
+                print(f"device {i} can open")
+                #trystart = True
+            except pyk4a.errors.K4AException as e:
+                print(e)
+                print(f"device {i} was feild to open")
+            try:
+                if not(self.k4a[i].is_running): 
+                    self.k4a[i].start()
+                    print(f"device {i} can start")
+                else:
+                    print(f"device {i} is already started")
+                trystart = True
+            except pyk4a.errors.K4AException as e:
+                print(e)
+                print(f"device {i} was feild to start")
+            try:
+                self.k4a[i].get_capture()
+                print(f"device {i} can get capture")
+                trycapture = True
+            except pyk4a.errors.K4AException as e:
+                print(e)
+                print(f"device {i} was feild to get capture")
+            
+            self.enabletoUseDevices[i] = trycapture 
+
+            if self.is_recording == False:
+                self.k4a[i].stop()
+    def DeviceMonitor(self):
+        # 録画中に新しいデバイスを追加しても認識はされません
+        device_count = get_device_num()
+        while True:
+            if not(self.is_recording):
+                if device_count<get_device_num():
+                    self.init_device()
+                self.enabletoStart()
+            time.sleep(3)
+
     def start(self,file_name=""):
         if file_name == "":
             file_name = self.prepared_name
         self.is_recording = True
-        if not self.cnt:
+        if not get_device_num():
             print("No devices available")
-            exit()
+            return 
         
         if not(self.is_k4a()):
             print("device init")
             self.init_device()
         #self.record = []
         print(len(self.k4a)>0)
-        for i in range(len(self.k4a)):
 
-            path = f"./record/{file_name}_{i}_0.mkv"
-                
-            rec = PyK4ARecord(
-                device=self.k4a[i],
-                config=self.config,
-                path=path)
-                          
-            rec.create()  
-
-            print(i)
-            thread = threading.Thread(target=lambda : self.recorder(file_name,self.k4a[i],rec,i,0))#,daemon=True)
-            thread.start()
+        for num,i in self.k4a.items():
+            
+            path = f"./record/{file_name}_{num}_0.mkv"
+            print(path)
+            is_start = False
+            while  is_start == False:
+                try :
+                    
+                    rec = PyK4ARecord(
+                        device=self.k4a[num],
+                        config=self.config,
+                        path=path)
+                                
+                    rec.create()
+                    print(i)
+                    thread = threading.Thread(target=lambda : self.recorder(file_name,self.k4a[num],rec,num,0))#,daemon=True)
+                    thread.start()
+                    is_start = True
+                except pyk4a.errors.K4AException as e:
+                    print("cant record")
+                    print(e)
+                    self.enabletoStart()
 
 
     def recorder(self,file_name,k4a,record,device_num,file_num):
         cnt = 0
+        self.enabletoStart()
+
         print(f"device {device_num} file {file_num} record start")
         #while self.is_recording:
         #for i in range(150):
         for i in range(15*20):
-            capture = k4a.get_capture()
-            record.write_capture(capture)
-            
-            if not(self.is_recording):
-                break
+            try:
+                capture = k4a.get_capture()
+                record.write_capture(capture)
+                
+                if not(self.is_recording):
+                    break
+            except  pyk4a.errors.K4AException as e:
+                print (e)
+                try:
+                    record.flush()
+                    record.close()
+                except:
+                    pass
+                del record
+
+                self.waitdevice(device_num)
+                return 0
         #print(f"device {device_num} file {file_num} finish")
 
         if self.is_recording:
@@ -151,62 +215,72 @@ class Recorder():
     def stop(self):
         print("stop recording")
         self.is_recording = False
+    def waitdevice(self,i):
+        print("wait device")
+        try:
+            self.k4a[i].stop()
+        #except pyk4a.errors.K4AException as e:
+        #    print(e)
+        #    print("stop dekinai")
+        except:
+            print("nazo error")
+        try:
+            self.k4a[i]._stop_imu()
+        #except pyk4a.errors.K4AException as e:
+        #    print(e)
+         #   print("imu stop dekinai")
+        except:
+            print("imu nazo error")
+            
+
+        while True:
+            self.enabletoStart()
+            if self.enabletoUseDevices[i]:
+                break
+            print("hajimettenai")
+            time.sleep(1)
+        print("restart")
+        self.start()
     def get_captures(self):
-        for device_num,k4a_i in enumerate(self.k4a):
-            capture = k4a_i.get_capture()
-            print(capture.color.shape)
-            size = capture.color.shape
-            self.captures[device_num] = cv2.resize(capture.color,dsize=[size[1]//2,size[0]//2])
+
+        onlycapture = self.is_recording
+        self.is_recording = True
+        self.enabletoStart()
+        for device_num,k4a_i in self.k4a.items():
+            if self.enabletoUseDevices[num]:
+                capture = k4a_i.get_capture()
+                print(capture.color.shape)
+                size = capture.color.shape
+                self.captures[device_num] = cv2.resize(capture.color,dsize=[size[1]//2,size[0]//2])
+        self.is_recording = onlycapture
+        self.enabletoStart()
             
         if len(self.captures)!=0:
             return self.captures
         else:
             return None
+        
+        
+    
     def get_imu(self):
+        onlycapture = self.is_recording
+        self.is_recording = True
+        self.enabletoStart()
+        
         imu ={}
-        for num,k4a_i in enumerate(self.k4a):
-            sample = k4a_i.get_imu_sample()
-            imu[num] = {}
-            imu[num]["device_num"] = num
-            imu[num]["acc_x"], imu[num]["acc_y"], imu[num]["acc_z"] = sample.pop("acc_sample")
-            imu[num]["gyro_x"], imu[num]["gyro_y"], imu[num]["gyro_z"] = sample.pop("gyro_sample")
+        for num,k4a_i in self.k4a.items():
+            print(num,k4a_i)
+            if self.enabletoUseDevices[num]:
+                sample = k4a_i.get_imu_sample()
+                imu[num] = {}
+                imu[num]["device_num"] = num
+                imu[num]["acc_x"], imu[num]["acc_y"], imu[num]["acc_z"] = sample.pop("acc_sample")
+                imu[num]["gyro_x"], imu[num]["gyro_y"], imu[num]["gyro_z"] = sample.pop("gyro_sample")
+        self.is_recording = onlycapture
+        self.enabletoStart()
+        
         return imu
-    #使ていなzip圧縮関数　
-    #圧縮する場合は別プロセスでzipper.pyを立ち上げること
-    def zip_on_commandline(self,full_name):
-        self.zipping_files.append(full_name)
-        start = time.time()
-        #subprocess.run(["powershell","compress-archive",f"./record/{fullname}",f"D:/NICT/{fullname}.zip" ])
-        #process=Popen(["powershell","compress-archive",f"./record/{full_name}",f"D:/NICT/{full_name}.zip" ],shell = True)
-        process=Popen(["7z","a",f"D:/NICT/{full_name}.zip",f"./record/{full_name}" ],shell = True)
-        
-        process.wait()
-        print(f"{full_name} was zipped in {time.time() - start} s")
-        self.zipping_files.remove(full_name)
-        if self.is_remove:
-            
-            os.remove(f"./record/{full_name}")
-            print(f"./record/{full_name} was removed")
-            
-    #使ていないzip圧縮関数　圧縮する場合は別プロセスでzipper.pyを立ち上げること
-
-    def zipper(self,full_name):
-        self.start = time.time()
-        print(f"{full_name} is zipping")
-        with zipfile.ZipFile(f'D:/NICT/{full_name}.zip', 'w',
-                     compression=zipfile.ZIP_DEFLATED,
-                     compresslevel=9) as zf:
-            zf.write(f'./record/{full_name}',f'{full_name}')
-        print(f"{full_name} was zipped in {time.time() -self.start} s")
-        if self.is_remove:
-            os.remove(f"./record/{full_name}")
-    def len_zip_proccess(self):
-        
-        for i in self.zipping_files:
-            print(f'{i} is zipping')
-        print()
-        return len(self.zipping_files)
-
+    
     
 
 if __name__ == "__main__":
