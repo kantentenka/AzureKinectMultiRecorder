@@ -72,6 +72,7 @@ while True:
         #targetのファイルサイズが0.5変わらないかつファイル生成直後でない
         #つまりファイルの書き込みが終了したとき、targetをD:recordに移動
         if filesize ==  os.path.getsize(target) and filesize>100000:
+
             target_filename = target.split("\\")[-1]
             shutil.move(target, f'D:/record/{target_filename}')
         time.sleep(0.5)

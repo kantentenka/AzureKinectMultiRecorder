@@ -1,2 +1,2 @@
-machine_id,2
+machine_id,1
 expect_connected_device_cnt,2
