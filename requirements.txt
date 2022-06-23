@@ -1,0 +1,3 @@
+pyk4a
+firebase-admin
+opencv-contrib-python

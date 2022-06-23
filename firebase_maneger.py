@@ -1,4 +1,3 @@
-from distutils.log import debug
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore,storage
@@ -33,8 +32,8 @@ data=[i.split(",") for i in data.split("\n")]
 f.close()
 print(data)
 
-
-doc_ref = db.collection(u'some_user')
+username = data[2][0]
+doc_ref = db.collection(username).document(u'user').collection('operation')
 machine_id = data[0][1]
 expect_connected_device_cnt = int(data[1][1])
 doc_ref.add({
@@ -48,7 +47,7 @@ doc_ref.add({
     u'screenshotname':""
 })
 
-doc_imu_ref = db.collection(u'some_user_imu')
+doc_imu_ref = db.collection(username).document(u'user').collection('imu')
 
 # Create an Event for notifying main thread.
 callback_done = threading.Event()
@@ -56,7 +55,7 @@ callback_done = threading.Event()
 # Create a callback on_snapshot function to capture changes
 
 
-col_query = db.collection(u'some_user')
+col_query = db.collection(username).document(u'user').collection('operation')
 is_recording = False
 is_first_read = True
 is_not_uploading = True
@@ -81,6 +80,8 @@ def on_snapshot(col_snapshot, changes, read_time):
     tdatetime = datetime.datetime.now()
     tstr = tdatetime.strftime('%Y%m%d_%H%M%S')
     for doc in docs:
+        print(doc.reference.path)
+        
         print(f'{doc.id} => {doc.to_dict()}')
         device_state = up_device_state(fotceup=True)
         if is_first_read:
@@ -110,7 +111,7 @@ def on_snapshot(col_snapshot, changes, read_time):
                     io_buf= io.BytesIO(buffer)
                     
                     blob.upload_from_file(io_buf,content_type=content_type)
-                    doc_ref = db.collection(u'some_user_capture')
+                    doc_ref = db.collection(username).document(u'user').collection(u'capture')
                     doc_ref.add({
                         u'datetime':datetime.datetime.now()-datetime.timedelta(hours=9),
                         u'filename':firename,
@@ -142,7 +143,7 @@ def up_device_state(fotceup = False):
             set_data[str(i)]=False
             device_state[i] = False
 
-    doc = db.collection(u'can_use').document(machine_id)
+    doc = db.collection(username).document(u'user').collection(u'can_use').document(machine_id)
     doc.set(set_data) 
     return device_state
 def count_one_hour():
