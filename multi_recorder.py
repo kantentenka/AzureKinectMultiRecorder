@@ -247,7 +247,7 @@ class Recorder():
         self.is_recording = True
         self.enabletoStart()
         for device_num,k4a_i in self.k4a.items():
-            if self.enabletoUseDevices[num]:
+            if self.enabletoUseDevices[device_num]:
                 capture = k4a_i.get_capture()
                 print(capture.color.shape)
                 size = capture.color.shape

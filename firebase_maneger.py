@@ -33,10 +33,11 @@ f.close()
 print(data)
 
 username = data[2][0]
-doc_ref = db.collection(username).document(u'user').collection('operation')
 machine_id = data[0][1]
+
+doc_ref = db.collection(username).document(u'user').collection('operation').document("state")
 expect_connected_device_cnt = int(data[1][1])
-doc_ref.add({
+doc_ref.set({
     u'datetime':datetime.datetime.now()-datetime.timedelta(hours=9),
     u'record': False,
     u'machine_id':machine_id,
@@ -55,7 +56,7 @@ callback_done = threading.Event()
 # Create a callback on_snapshot function to capture changes
 
 
-col_query = db.collection(username).document(u'user').collection('operation')
+col_query = db.collection(username).document(u'user').collection('operation').document("state")
 is_recording = False
 is_first_read = True
 is_not_uploading = True
@@ -75,19 +76,17 @@ def on_snapshot(col_snapshot, changes, read_time):
     global is_recording,rec_start_time,is_first_read,is_not_uploading,device_state
     print(u'Callback received query snapshot.')
     print(u'Current cities in California:')
-    query = col_query.order_by("datetime", direction=firestore.Query.DESCENDING).limit(1)
-    docs = query.get()
+    query = col_query
+    doc = query.get()
     tdatetime = datetime.datetime.now()
     tstr = tdatetime.strftime('%Y%m%d_%H%M%S')
-    for doc in docs:
-        print(doc.reference.path)
-        
-        print(f'{doc.id} => {doc.to_dict()}')
-        device_state = up_device_state(fotceup=True)
-        if is_first_read:
-            is_first_read = False
-            
-            break
+    print(doc.reference.path)
+    
+    print(f'{doc.id} => {doc.to_dict()}')
+    device_state = up_device_state(fotceup=True)
+    if is_first_read:
+        is_first_read = False
+    else:
         if doc.to_dict()["record"] == True and is_recording == False:
             rec_start_time = time.time()
             add_imu(recorder.get_imu())
@@ -111,19 +110,17 @@ def on_snapshot(col_snapshot, changes, read_time):
                     io_buf= io.BytesIO(buffer)
                     
                     blob.upload_from_file(io_buf,content_type=content_type)
-                    doc_ref = db.collection(username).document(u'user').collection(u'capture')
-                    doc_ref.add({
+                    doc_ref = db.collection(username).document(u'user').collection(u'capture').document(f"{machine_id}_{dict_key}")
+                    doc_ref.set({
                         u'datetime':datetime.datetime.now()-datetime.timedelta(hours=9),
                         u'filename':firename,
-                        u'devicestate':f"{machine_id}_{dict_key}"
                     })
             is_not_uploading = True
         is_recording = doc.to_dict()["record"]
 
     callback_done.set()
 
-def up_device_state(fotceup = False):
-    
+def up_device_state(fotceup = False):    
     is_notchanged = not(fotceup)
     for i in range(int(data[1][1])):
         if device_state.get(i) != bool(recorder.enabletoUseDevices.get(i)):
@@ -151,7 +148,7 @@ def count_one_hour():
     if is_recording:
         if time.time() -rec_start_time >60*60:
             recorder.stop()
-            doc_ref.add({
+            doc_ref.set({
                 u'datetime':datetime.datetime.now()-datetime.timedelta(hours=9),
                 u'record': False,
                 u'machine_id':data[0][1],
